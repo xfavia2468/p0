@@ -1,6 +1,13 @@
-export default function Home (props) {
+import { Link } from "react-router";
+import { Button } from "react-bootstrap";
 
-    return <div>
-        <h1>Home</h1>
-    </div>
+export default function Home(props) {
+	return (
+		<div>
+			<h1>Home</h1>
+			<Link to="/resize">
+				<Button variant="primary">Go to Resize Page</Button>
+			</Link>
+		</div>
+	);
 }
