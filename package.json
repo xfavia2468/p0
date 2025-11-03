@@ -8,8 +8,8 @@
 		"build": "vite build",
 		"lint": "eslint .",
 		"preview": "vite preview",
-		"buildorigin": "VITE_BASE_PATH=/p/0/ vite build",
-		"buildproject": "VITE_BASE_PATH=/p/202/ vite build"
+		"buildorigin": "VITE_BASE_PATH=/p0/ vite build",
+		"buildproject": "VITE_BASE_PATH=/p202/ vite build"
 	},
 	"dependencies": {
 		"bootstrap": "^5.3.8",
