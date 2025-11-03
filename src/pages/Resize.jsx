@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { Container, Form, Button, Image, Spinner } from "react-bootstrap";
 
 function Resize() {
@@ -7,23 +7,47 @@ function Resize() {
 	const [editedUrl, setEditedUrl] = useState(null);
 	const [keepAspect, setKeepAspect] = useState(true);
 	const [loading, setLoading] = useState(false);
+	const [format, setFormat] = useState("image/png"); // PNG by default
 
 	const widthRef = useRef(null);
 	const heightRef = useRef(null);
+	const canvasRef = useRef(null);
+
+	// 🧹 Cleanup created object URLs to avoid memory leaks
+	useEffect(() => {
+		return () => {
+			if (previewUrl) URL.revokeObjectURL(previewUrl);
+			if (editedUrl) URL.revokeObjectURL(editedUrl);
+		};
+	}, [previewUrl, editedUrl]);
 
 	const handleFileChange = (e) => {
 		const file = e.target.files[0];
+		if (!file) return;
 		setSelectedFile(file);
-		setPreviewUrl(file ? URL.createObjectURL(file) : null);
+		setPreviewUrl(URL.createObjectURL(file));
 		setEditedUrl(null);
 	};
 
-	const handleSubmit = async () => {
-		const width = widthRef.current.value;
-		const height = heightRef.current.value;
+	// 🖼️ Helper: load image as a Promise
+	const loadImage = (file) =>
+		new Promise((resolve, reject) => {
+			const img = new window.Image();
+			img.onload = () => resolve(img);
+			img.onerror = reject;
+			img.src = URL.createObjectURL(file);
+		});
 
-		if (!selectedFile || (!width && !height)) {
-			alert("Please select an image and provide at least width or height.");
+	const handleResize = async () => {
+		if (!selectedFile) {
+			alert("Please select an image first.");
+			return;
+		}
+
+		let width = parseInt(widthRef.current.value);
+		let height = parseInt(heightRef.current.value);
+		if (!width && !height) {
+			alert("Please specify at least a width or height.");
 			return;
 		}
 
@@ -31,35 +55,57 @@ function Resize() {
 		setEditedUrl(null);
 
 		try {
-			const formData = new FormData();
-			formData.append("file", selectedFile);
-			if (width) formData.append("width", width);
-			if (height) formData.append("height", height);
-			formData.append("keep_aspect_ratio", keepAspect ? "true" : "false");
+			const img = await loadImage(selectedFile);
+			const canvas = canvasRef.current;
+			const ctx = canvas.getContext("2d");
 
-			const response = await fetch("https://oyyi.xyz/api/image/resize", {
-				method: "POST",
-				body: formData,
-			});
+			let targetWidth = width || img.width;
+			let targetHeight = height || img.height;
 
-			if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
+			if (keepAspect) {
+				const aspect = img.width / img.height;
+				if (width && !height) targetHeight = Math.round(width / aspect);
+				else if (!width && height) targetWidth = Math.round(height * aspect);
+				else if (width && height) {
+					const ratio = Math.min(width / img.width, height / img.height);
+					targetWidth = Math.round(img.width * ratio);
+					targetHeight = Math.round(img.height * ratio);
+				}
+			}
 
-			const blob = await response.blob();
-			const imageUrl = URL.createObjectURL(blob);
-			setEditedUrl(imageUrl);
-		} catch (error) {
-			console.error("Image resize failed:", error);
-			alert("Image resize failed. Check console for details.");
-		} finally {
+			canvas.width = targetWidth;
+			canvas.height = targetHeight;
+			ctx.clearRect(0, 0, targetWidth, targetHeight);
+			ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+
+			canvas.toBlob(
+				(blob) => {
+					if (!blob) {
+						alert("Failed to process image.");
+						setLoading(false);
+						return;
+					}
+					const url = URL.createObjectURL(blob);
+					setEditedUrl(url);
+					setLoading(false);
+				},
+				format,
+				format === "image/jpeg" ? 0.9 : 1.0 // optional quality control
+			);
+		} catch (err) {
+			console.error(err);
+			alert("Failed to load or resize image.");
 			setLoading(false);
 		}
 	};
 
 	const handleDownload = () => {
 		if (!editedUrl) return;
+		const ext =
+			format === "image/png" ? "png" : format === "image/jpeg" ? "jpg" : "webp";
 		const link = document.createElement("a");
 		link.href = editedUrl;
-		link.download = "resized_image.png";
+		link.download = `resized_image.${ext}`;
 		link.click();
 	};
 
@@ -71,6 +117,15 @@ function Resize() {
 		if (widthRef.current) widthRef.current.value = "";
 		if (heightRef.current) heightRef.current.value = "";
 	};
+
+	// 🔢 Optional: live preview of target dimensions
+	const targetDimensions = useMemo(() => {
+		if (!selectedFile) return null;
+		const width = parseInt(widthRef.current?.value);
+		const height = parseInt(heightRef.current?.value);
+		if (!width && !height) return null;
+		return { width, height };
+	}, [selectedFile, keepAspect]);
 
 	return (
 		<Container className="py-5 text-center">
@@ -90,22 +145,59 @@ function Resize() {
 					type="number"
 					placeholder="Width (px)"
 					style={{ maxWidth: "150px" }}
+					min="1"
+					max="4000"
+					step="any"
+					onInput={(e) => {
+						let val = parseFloat(e.target.value);
+						if (isNaN(val)) return;
+						val = Math.floor(val);
+						val = Math.min(4000, Math.max(1, val));
+						e.target.value = val;
+					}}
+					onKeyDown={(e) => {
+						if (["e", "E", "+", "-"].includes(e.key)) e.preventDefault();
+					}}
 				/>
+
 				<Form.Control
 					ref={heightRef}
 					type="number"
 					placeholder="Height (px)"
 					style={{ maxWidth: "150px" }}
+					min="1"
+					max="4000"
+					step="any"
+					onInput={(e) => {
+						let val = parseFloat(e.target.value);
+						if (isNaN(val)) return;
+						val = Math.floor(val);
+						val = Math.min(4000, Math.max(1, val));
+						e.target.value = val;
+					}}
+					onKeyDown={(e) => {
+						if (["e", "E", "+", "-"].includes(e.key)) e.preventDefault();
+					}}
 				/>
 			</Form.Group>
 
-			<Form.Group className="mb-3 d-flex justify-content-center">
+			<Form.Group className="mb-3 d-flex justify-content-center gap-3">
 				<Form.Check
 					type="checkbox"
 					label="Keep Aspect Ratio"
 					checked={keepAspect}
 					onChange={(e) => setKeepAspect(e.target.checked)}
 				/>
+
+				<Form.Select
+					value={format}
+					onChange={(e) => setFormat(e.target.value)}
+					style={{ maxWidth: "180px" }}
+				>
+					<option value="image/png">PNG</option>
+					<option value="image/jpeg">JPEG</option>
+					<option value="image/webp">WEBP</option>
+				</Form.Select>
 			</Form.Group>
 
 			{previewUrl && (
@@ -122,7 +214,7 @@ function Resize() {
 			<div className="mb-3 d-flex justify-content-center gap-2">
 				<Button
 					variant="primary"
-					onClick={handleSubmit}
+					onClick={handleResize}
 					disabled={!selectedFile || loading}
 				>
 					{loading ? <Spinner animation="border" size="sm" /> : "Resize Image"}
@@ -138,14 +230,18 @@ function Resize() {
 					<Image
 						src={editedUrl}
 						thumbnail
-						style={{ maxWidth: "300px", marginBottom: "20px" }}
+						style={{ maxWidth: "300px", marginBottom: "10px" }}
 					/>
-					<br />
+					<p>
+						Size: {canvasRef.current?.width} × {canvasRef.current?.height} px
+					</p>
 					<Button variant="success" onClick={handleDownload}>
 						Download
 					</Button>
 				</div>
 			)}
+
+			<canvas ref={canvasRef} style={{ display: "none" }} />
 		</Container>
 	);
 }
