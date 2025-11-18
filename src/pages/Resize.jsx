@@ -1,5 +1,7 @@
-import { useState, useRef, useEffect, useMemo } from "react";
-import { Container, Form, Button, Image, Spinner } from "react-bootstrap";
+import { useState, useRef, useEffect } from "react";
+import { Container, Form, Button, Spinner, Row, Col } from "react-bootstrap";
+import ImageUpload from "../components/ImageUpload";
+import ImagePreview from "../components/ImagePreview";
 
 function Resize() {
 	const [selectedFile, setSelectedFile] = useState(null);
@@ -21,11 +23,9 @@ function Resize() {
 		};
 	}, [previewUrl, editedUrl]);
 
-	const handleFileChange = (e) => {
-		const file = e.target.files[0];
-		if (!file) return;
+	const handleFileSelect = (file, url) => {
 		setSelectedFile(file);
-		setPreviewUrl(URL.createObjectURL(file));
+		setPreviewUrl(url);
 		setEditedUrl(null);
 	};
 
@@ -118,127 +118,134 @@ function Resize() {
 		if (heightRef.current) heightRef.current.value = "";
 	};
 
-	// 🔢 Optional: live preview of target dimensions
-	const targetDimensions = useMemo(() => {
-		if (!selectedFile) return null;
-		const width = parseInt(widthRef.current?.value);
-		const height = parseInt(heightRef.current?.value);
-		if (!width && !height) return null;
-		return { width, height };
-	}, [selectedFile, keepAspect]);
-
 	return (
-		<Container className="py-5 text-center">
-			<h2 className="mb-4">Image Resizer</h2>
-
-			<Form.Group className="mb-3">
-				<Form.Control
-					type="file"
-					accept="image/*"
-					onChange={handleFileChange}
-				/>
-			</Form.Group>
-
-			<Form.Group className="mb-3 d-flex justify-content-center gap-2">
-				<Form.Control
-					ref={widthRef}
-					type="number"
-					placeholder="Width (px)"
-					style={{ maxWidth: "150px" }}
-					min="1"
-					max="4000"
-					step="any"
-					onInput={(e) => {
-						let val = parseFloat(e.target.value);
-						if (isNaN(val)) return;
-						val = Math.floor(val);
-						val = Math.min(4000, Math.max(1, val));
-						e.target.value = val;
-					}}
-					onKeyDown={(e) => {
-						if (["e", "E", "+", "-"].includes(e.key)) e.preventDefault();
-					}}
-				/>
-
-				<Form.Control
-					ref={heightRef}
-					type="number"
-					placeholder="Height (px)"
-					style={{ maxWidth: "150px" }}
-					min="1"
-					max="4000"
-					step="any"
-					onInput={(e) => {
-						let val = parseFloat(e.target.value);
-						if (isNaN(val)) return;
-						val = Math.floor(val);
-						val = Math.min(4000, Math.max(1, val));
-						e.target.value = val;
-					}}
-					onKeyDown={(e) => {
-						if (["e", "E", "+", "-"].includes(e.key)) e.preventDefault();
-					}}
-				/>
-			</Form.Group>
-
-			<Form.Group className="mb-3 d-flex justify-content-center gap-3">
-				<Form.Check
-					type="checkbox"
-					label="Keep Aspect Ratio"
-					checked={keepAspect}
-					onChange={(e) => setKeepAspect(e.target.checked)}
-				/>
-
-				<Form.Select
-					value={format}
-					onChange={(e) => setFormat(e.target.value)}
-					style={{ maxWidth: "180px" }}
-				>
-					<option value="image/png">PNG</option>
-					<option value="image/jpeg">JPEG</option>
-					<option value="image/webp">WEBP</option>
-				</Form.Select>
-			</Form.Group>
-
-			{previewUrl && (
-				<>
-					<h5>Preview:</h5>
-					<Image
-						src={previewUrl}
-						thumbnail
-						style={{ maxWidth: "300px", marginBottom: "20px" }}
-					/>
-				</>
-			)}
-
-			<div className="mb-3 d-flex justify-content-center gap-2">
-				<Button
-					variant="primary"
-					onClick={handleResize}
-					disabled={!selectedFile || loading}
-				>
-					{loading ? <Spinner animation="border" size="sm" /> : "Resize Image"}
-				</Button>
-				<Button variant="secondary" onClick={handleReset}>
-					Reset
-				</Button>
+		<Container className="py-5">
+			<div className={previewUrl ? "mb-4" : "text-center mb-5"}>
+				<h2 className="mb-3">Image Resizer</h2>
+				<p className="text-muted">Change image dimensions while maintaining or adjusting aspect ratio</p>
 			</div>
 
-			{editedUrl && (
-				<div>
-					<h5>Resized Image:</h5>
-					<Image
-						src={editedUrl}
-						thumbnail
-						style={{ maxWidth: "300px", marginBottom: "10px" }}
-					/>
-					<p>
-						Size: {canvasRef.current?.width} × {canvasRef.current?.height} px
-					</p>
-					<Button variant="success" onClick={handleDownload}>
-						Download
-					</Button>
-				</div>
+			{!previewUrl ? (
+				// Centered layout when no file selected
+				<Row className="justify-content-center">
+					<Col xs={12} md={8} lg={6}>
+						<ImageUpload onFileSelect={handleFileSelect} />
+					</Col>
+				</Row>
+			) : (
+				// Two-column layout when file is selected
+				<Row>
+					<Col xs={12} lg={5} className="mb-4">
+						<ImageUpload onFileSelect={handleFileSelect} />
+
+						<Form.Group className="mb-3">
+							<Row className="g-2">
+								<Col xs={6}>
+									<Form.Control
+										ref={widthRef}
+										type="number"
+										placeholder="Width (px)"
+										min="1"
+										max="4000"
+										step="any"
+										onInput={(e) => {
+											let val = parseFloat(e.target.value);
+											if (isNaN(val)) return;
+											val = Math.floor(val);
+											val = Math.min(4000, Math.max(1, val));
+											e.target.value = val;
+										}}
+										onKeyDown={(e) => {
+											if (["e", "E", "+", "-"].includes(e.key)) e.preventDefault();
+										}}
+									/>
+								</Col>
+								<Col xs={6}>
+									<Form.Control
+										ref={heightRef}
+										type="number"
+										placeholder="Height (px)"
+										min="1"
+										max="4000"
+										step="any"
+										onInput={(e) => {
+											let val = parseFloat(e.target.value);
+											if (isNaN(val)) return;
+											val = Math.floor(val);
+											val = Math.min(4000, Math.max(1, val));
+											e.target.value = val;
+										}}
+										onKeyDown={(e) => {
+											if (["e", "E", "+", "-"].includes(e.key)) e.preventDefault();
+										}}
+									/>
+								</Col>
+							</Row>
+						</Form.Group>
+
+						<Form.Group className="mb-3">
+							<Row className="g-2">
+								<Col xs={12} sm={6}>
+									<Form.Check
+										type="checkbox"
+										label="Keep Aspect Ratio"
+										checked={keepAspect}
+										onChange={(e) => setKeepAspect(e.target.checked)}
+									/>
+								</Col>
+								<Col xs={12} sm={6}>
+									<Form.Select
+										value={format}
+										onChange={(e) => setFormat(e.target.value)}
+									>
+										<option value="image/png">PNG</option>
+										<option value="image/jpeg">JPEG</option>
+										<option value="image/webp">WEBP</option>
+									</Form.Select>
+								</Col>
+							</Row>
+						</Form.Group>
+
+						<div className="mb-4 d-flex gap-2">
+							<Button
+								variant="primary"
+								onClick={handleResize}
+								disabled={!selectedFile || loading}
+							>
+								{loading ? <Spinner animation="border" size="sm" className="me-2" /> : null}
+								{loading ? "Processing..." : "Resize Image"}
+							</Button>
+							<Button variant="secondary" onClick={handleReset}>
+								Reset
+							</Button>
+						</div>
+					</Col>
+
+					<Col xs={12} lg={7}>
+						<div className="sticky-top" style={{ top: '2rem' }}>
+							{previewUrl && (
+								<div className="mb-4">
+									<ImagePreview src={previewUrl} title="Original Image" />
+								</div>
+							)}
+
+							{editedUrl && (
+								<div>
+									<ImagePreview
+										src={editedUrl}
+										title="Resized Image"
+										showSize={true}
+										width={canvasRef.current?.width}
+										height={canvasRef.current?.height}
+									/>
+									<Button variant="success" onClick={handleDownload} className="mt-2 w-100">
+										Download
+									</Button>
+								</div>
+							)}
+						</div>
+					</Col>
+				</Row>
 			)}
 
 			<canvas ref={canvasRef} style={{ display: "none" }} />
