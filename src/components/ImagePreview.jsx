@@ -8,7 +8,7 @@ export default function ImagePreview({
 	showSize = false,
 	width,
 	height,
-}) { 
+}) {
 	if (!src) return null;
 
 	return (

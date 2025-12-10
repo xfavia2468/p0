@@ -2,6 +2,9 @@ import { useState, useRef, useEffect } from "react";
 import { Container, Form, Button, Spinner, Row, Col } from "react-bootstrap";
 import ImageUpload from "../components/ImageUpload";
 import ImagePreview from "../components/ImagePreview";
+import { useImage } from "../ImageContext";
+import { useToast } from "../contexts/ToastContext";
+import { ImageSkeleton, ButtonSkeleton } from "../components/LoadingSkeleton";
 
 function Rotate() {
 	const [selectedFile, setSelectedFile] = useState(null);
@@ -10,8 +13,20 @@ function Rotate() {
 	const [loading, setLoading] = useState(false);
 	const [rotationAngle, setRotationAngle] = useState(0);
 	const [format, setFormat] = useState("image/png");
+	const { image: contextImage, setImage: setContextImage } = useImage();
+	const { addToast } = useToast();
 
 	const canvasRef = useRef(null);
+
+	useEffect(() => {
+		// Initialize from context if image exists
+		if (contextImage && contextImage.url) {
+			setSelectedFile(contextImage.file);
+			setPreviewUrl(contextImage.url);
+			setEditedUrl(null);
+			setRotationAngle(0);
+		}
+	}, []);
 
 	useEffect(() => {
 		return () => {
@@ -37,7 +52,7 @@ function Rotate() {
 
 	const handleRotate = async (angle = null) => {
 		if (!selectedFile) {
-			alert("Please select an image first.");
+			addToast("Please select an image first.", "error");
 			return;
 		}
 
@@ -68,20 +83,27 @@ function Rotate() {
 			canvas.toBlob(
 				(blob) => {
 					if (!blob) {
-						alert("Failed to rotate image.");
+						addToast("Failed to rotate image.", "error");
 						setLoading(false);
 						return;
 					}
 					const url = URL.createObjectURL(blob);
 					setEditedUrl(url);
+					// Convert blob to data URL for persistent storage
+					const reader = new FileReader();
+					reader.onloadend = () => {
+						setContextImage({ file: blob, url: reader.result });
+					};
+					reader.readAsDataURL(blob);
 					setLoading(false);
+					addToast("Image rotated successfully!", "success");
 				},
 				format,
 				format === "image/jpeg" ? 0.9 : 1.0
 			);
 		} catch (err) {
 			console.error(err);
-			alert("Failed to rotate image.");
+			addToast("Failed to rotate image.", "error");
 			setLoading(false);
 		}
 	};
@@ -103,6 +125,7 @@ function Rotate() {
 		link.href = editedUrl;
 		link.download = `rotated_image.${ext}`;
 		link.click();
+		addToast("Image downloaded successfully!", "success");
 	};
 
 	const handleReset = () => {
@@ -110,13 +133,16 @@ function Rotate() {
 		setPreviewUrl(null);
 		setEditedUrl(null);
 		setRotationAngle(0);
+		addToast("Reset complete", "info");
 	};
 
 	return (
 		<Container className="py-5">
 			<div className={previewUrl ? "mb-4" : "text-center mb-5"}>
 				<h2 className="mb-3">Image Rotator</h2>
-				<p className="text-muted">Rotate your image by any angle or use preset rotations</p>
+				<p className="text-muted">
+					Rotate your image by any angle or use preset rotations
+				</p>
 			</div>
 
 			{!previewUrl ? (
@@ -131,7 +157,6 @@ function Rotate() {
 				<Row>
 					<Col xs={12} lg={5} className="mb-4">
 						<ImageUpload onFileSelect={handleFileSelect} />
-
 						<Form.Group className="mb-3">
 							<Form.Label>Quick Rotate</Form.Label>
 							<div className="d-flex gap-2 flex-wrap">
@@ -161,25 +186,45 @@ function Rotate() {
 								</Button>
 							</div>
 						</Form.Group>
-
 						<Form.Group className="mb-3">
-							<Form.Label>Custom Angle: {rotationAngle}°</Form.Label>
-							<Form.Range
-								min="-180"
-								max="180"
-								value={rotationAngle}
-								onChange={(e) => setRotationAngle(parseInt(e.target.value))}
-							/>
-							<div className="d-flex justify-content-between">
+							<Form.Label htmlFor="rotate-angle">
+								Custom Angle: {rotationAngle}°
+							</Form.Label>
+							<div className="d-flex gap-2">
+								<Form.Range
+									id="rotate-angle"
+									min="-180"
+									max="180"
+									value={rotationAngle}
+									onChange={(e) => setRotationAngle(parseInt(e.target.value))}
+									className="flex-grow-1"
+								/>
+								<Form.Control
+									type="number"
+									min="-180"
+									max="180"
+									value={rotationAngle}
+									onChange={(e) =>
+										setRotationAngle(
+											Math.max(
+												-180,
+												Math.min(180, parseInt(e.target.value) || 0)
+											)
+										)
+									}
+									style={{ width: "80px" }}
+								/>
+							</div>
+							<div className="d-flex justify-content-between mt-2">
 								<small className="text-muted">-180°</small>
 								<small className="text-muted">0°</small>
 								<small className="text-muted">180°</small>
 							</div>
-						</Form.Group>
-
+						</Form.Group>{" "}
 						<Form.Group className="mb-3">
-							<Form.Label>Output Format</Form.Label>
+							<Form.Label htmlFor="rotate-format">Output Format</Form.Label>
 							<Form.Select
+								id="rotate-format"
 								value={format}
 								onChange={(e) => setFormat(e.target.value)}
 							>
@@ -188,14 +233,15 @@ function Rotate() {
 								<option value="image/webp">WEBP</option>
 							</Form.Select>
 						</Form.Group>
-
 						<div className="mb-4 d-flex gap-2">
 							<Button
 								variant="primary"
 								onClick={handleCustomRotate}
 								disabled={!selectedFile || loading}
 							>
-								{loading ? <Spinner animation="border" size="sm" className="me-2" /> : null}
+								{loading ? (
+									<Spinner animation="border" size="sm" className="me-2" />
+								) : null}
 								{loading ? "Processing..." : "Rotate Image"}
 							</Button>
 							<Button variant="secondary" onClick={handleReset}>
@@ -205,13 +251,13 @@ function Rotate() {
 					</Col>
 
 					<Col xs={12} lg={7}>
-						<div className="sticky-top" style={{ top: '2rem' }}>
+						<div className="sticky-top" style={{ top: "0.5rem" }}>
 							{previewUrl && (
 								<div className="mb-4">
 									<ImagePreview src={previewUrl} title="Original Image" />
 								</div>
-							)}
-
+							)}{" "}
+							{loading && <ImageSkeleton height={300} />}
 							{editedUrl && (
 								<div>
 									<ImagePreview
@@ -221,7 +267,11 @@ function Rotate() {
 										width={canvasRef.current?.width}
 										height={canvasRef.current?.height}
 									/>
-									<Button variant="success" onClick={handleDownload} className="mt-2 w-100">
+									<Button
+										variant="success"
+										onClick={handleDownload}
+										className="mt-2 w-100"
+									>
 										Download
 									</Button>
 								</div>
@@ -237,4 +287,3 @@ function Rotate() {
 }
 
 export default Rotate;
-

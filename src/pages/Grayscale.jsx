@@ -3,28 +3,28 @@ import { Container, Form, Button, Spinner, Row, Col } from "react-bootstrap";
 import ImageUpload from "../components/ImageUpload";
 import ImagePreview from "../components/ImagePreview";
 import { useImage } from "../ImageContext";
+import { useToast } from "../contexts/ToastContext";
+import { ImageSkeleton, ButtonSkeleton } from "../components/LoadingSkeleton";
 
-function Convert() {
+function Grayscale() {
 	const [selectedFile, setSelectedFile] = useState(null);
 	const [previewUrl, setPreviewUrl] = useState(null);
 	const [editedUrl, setEditedUrl] = useState(null);
 	const [loading, setLoading] = useState(false);
+	const [intensity, setIntensity] = useState(100);
 	const [format, setFormat] = useState("image/png");
-	const [quality, setQuality] = useState(0.9);
-	const [originalSize, setOriginalSize] = useState(0);
-	const [convertedSize, setConvertedSize] = useState(0);
 	const { image: contextImage, setImage: setContextImage } = useImage();
+	const { addToast } = useToast();
 
 	const canvasRef = useRef(null);
+	const imageRef = useRef(null);
 
 	useEffect(() => {
-		// Initialize from context if image exists
 		if (contextImage && contextImage.url) {
 			setSelectedFile(contextImage.file);
 			setPreviewUrl(contextImage.url);
 			setEditedUrl(null);
-			setOriginalSize(contextImage.file?.size || 0);
-			setConvertedSize(0);
+			imageRef.current = null;
 		}
 	}, []);
 
@@ -39,8 +39,7 @@ function Convert() {
 		setSelectedFile(file);
 		setPreviewUrl(url);
 		setEditedUrl(null);
-		setOriginalSize(file.size);
-		setConvertedSize(0);
+		imageRef.current = null;
 	};
 
 	const loadImage = (file) =>
@@ -51,62 +50,72 @@ function Convert() {
 			img.src = URL.createObjectURL(file);
 		});
 
-	const formatBytes = (bytes) => {
-		if (bytes === 0) return "0 Bytes";
-		const k = 1024;
-		const sizes = ["Bytes", "KB", "MB"];
-		const i = Math.floor(Math.log(bytes) / Math.log(k));
-		return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
-	};
-
-	const handleConvert = async () => {
+	const applyGrayscale = async () => {
 		if (!selectedFile) {
-			alert("Please select an image first.");
+			addToast("Please select an image first.", "error");
 			return;
 		}
 
 		setLoading(true);
 		setEditedUrl(null);
-		setConvertedSize(0);
 
 		try {
-			const img = await loadImage(selectedFile);
+			let img = imageRef.current;
+			if (!img) {
+				img = await loadImage(selectedFile);
+				imageRef.current = img;
+			}
+
 			const canvas = canvasRef.current;
 			const ctx = canvas.getContext("2d");
 
 			canvas.width = img.width;
 			canvas.height = img.height;
-			ctx.clearRect(0, 0, img.width, img.height);
 			ctx.drawImage(img, 0, 0);
 
-			let qualityValue = 1.0;
-			if (format === "image/jpeg" || format === "image/webp") {
-				qualityValue = quality;
+			const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+			const data = imageData.data;
+			const intensityFactor = intensity / 100;
+
+			for (let i = 0; i < data.length; i += 4) {
+				const r = data[i];
+				const g = data[i + 1];
+				const b = data[i + 2];
+
+				// Use luminance formula
+				const gray = r * 0.299 + g * 0.587 + b * 0.114;
+
+				// Blend between original and grayscale based on intensity
+				data[i] = r + (gray - r) * intensityFactor;
+				data[i + 1] = g + (gray - g) * intensityFactor;
+				data[i + 2] = b + (gray - b) * intensityFactor;
 			}
+
+			ctx.putImageData(imageData, 0, 0);
 
 			canvas.toBlob(
 				(blob) => {
 					if (!blob) {
-						alert("Failed to convert image.");
+						addToast("Failed to apply grayscale.", "error");
 						setLoading(false);
 						return;
 					}
-					setConvertedSize(blob.size);
 					const url = URL.createObjectURL(blob);
 					setEditedUrl(url);
 					const reader = new FileReader();
 					reader.onloadend = () => {
 						setContextImage({ file: blob, url: reader.result });
+						addToast("Grayscale applied successfully!", "success");
 					};
 					reader.readAsDataURL(blob);
 					setLoading(false);
 				},
 				format,
-				qualityValue
+				format === "image/jpeg" ? 0.9 : 1.0
 			);
 		} catch (err) {
 			console.error(err);
-			alert("Failed to convert image.");
+			addToast("Failed to apply grayscale.", "error");
 			setLoading(false);
 		}
 	};
@@ -114,35 +123,29 @@ function Convert() {
 	const handleDownload = () => {
 		if (!editedUrl) return;
 		const ext =
-			format === "image/png"
-				? "png"
-				: format === "image/jpeg"
-				? "jpg"
-				: format === "image/webp"
-				? "webp"
-				: "png";
+			format === "image/png" ? "png" : format === "image/jpeg" ? "jpg" : "webp";
 		const link = document.createElement("a");
 		link.href = editedUrl;
-		link.download = `converted_image.${ext}`;
+		link.download = `grayscale_image.${ext}`;
 		link.click();
+		addToast("Image downloaded successfully!", "success");
 	};
 
 	const handleReset = () => {
 		setSelectedFile(null);
 		setPreviewUrl(null);
 		setEditedUrl(null);
-		setFormat("image/png");
-		setQuality(0.9);
-		setOriginalSize(0);
-		setConvertedSize(0);
+		setIntensity(100);
+		imageRef.current = null;
+		addToast("Reset complete", "info");
 	};
 
 	return (
 		<Container className="py-5">
 			<div className={previewUrl ? "mb-4" : "text-center mb-5"}>
-				<h2 className="mb-3">Format Converter</h2>
+				<h2 className="mb-3">Grayscale</h2>
 				<p className="text-muted">
-					Convert images between different formats (PNG, JPEG, WEBP)
+					Convert your image to grayscale with adjustable intensity
 				</p>
 			</div>
 
@@ -160,8 +163,44 @@ function Convert() {
 						<ImageUpload onFileSelect={handleFileSelect} />
 
 						<Form.Group className="mb-3">
-							<Form.Label>Output Format</Form.Label>
+							<Form.Label htmlFor="intensity-range">
+								Intensity: {intensity}%
+							</Form.Label>
+							<div className="d-flex gap-2">
+								<Form.Range
+									id="intensity-range"
+									min={0}
+									max={100}
+									value={intensity}
+									onChange={(e) => setIntensity(Number(e.target.value))}
+									disabled={!selectedFile}
+									className="flex-grow-1"
+								/>
+								<Form.Control
+									type="number"
+									min="0"
+									max="100"
+									value={intensity}
+									onChange={(e) =>
+										setIntensity(
+											Math.max(0, Math.min(100, parseInt(e.target.value) || 0))
+										)
+									}
+									disabled={!selectedFile}
+									style={{ width: "80px" }}
+								/>
+							</div>
+							<small className="text-muted d-block mt-2">
+								0% = Color (Original), 100% = Full Grayscale
+							</small>
+						</Form.Group>
+
+						<Form.Group className="mb-3">
+							<Form.Label htmlFor="gray-output-format">
+								Output Format
+							</Form.Label>
 							<Form.Select
+								id="gray-output-format"
 								value={format}
 								onChange={(e) => setFormat(e.target.value)}
 							>
@@ -171,45 +210,16 @@ function Convert() {
 							</Form.Select>
 						</Form.Group>
 
-						{(format === "image/jpeg" || format === "image/webp") && (
-							<Form.Group className="mb-3">
-								<Form.Label htmlFor="convert-quality">
-									Quality: {Math.round(quality * 100)}%
-								</Form.Label>
-								<Form.Range
-									id="convert-quality"
-									min="0.1"
-									max="1.0"
-									step="0.1"
-									value={quality}
-									onChange={(e) => setQuality(parseFloat(e.target.value))}
-								/>
-								<div className="d-flex justify-content-between">
-									<small className="text-muted">10%</small>
-									<small className="text-muted">50%</small>
-									<small className="text-muted">100%</small>
-								</div>
-							</Form.Group>
-						)}
-
-						{originalSize > 0 && (
-							<div className="mb-3">
-								<p className="text-muted small mb-0">
-									Original size: <strong>{formatBytes(originalSize)}</strong>
-								</p>
-							</div>
-						)}
-
 						<div className="mb-4 d-flex gap-2">
 							<Button
 								variant="primary"
-								onClick={handleConvert}
+								onClick={applyGrayscale}
 								disabled={!selectedFile || loading}
 							>
 								{loading ? (
 									<Spinner animation="border" size="sm" className="me-2" />
 								) : null}
-								{loading ? "Converting..." : "Convert Image"}
+								{loading ? "Processing..." : "Apply Grayscale"}
 							</Button>
 							<Button variant="secondary" onClick={handleReset}>
 								Reset
@@ -218,53 +228,36 @@ function Convert() {
 					</Col>
 
 					<Col xs={12} lg={7}>
-						<div className="sticky-top" style={{ top: "2rem" }}>
-							{previewUrl && (
-								<div className="mb-4">
+						{loading && editedUrl === null ? (
+							<ImageSkeleton />
+						) : (
+							<div className="sticky-top" style={{ top: "0.5rem" }}>
+								{previewUrl && (
 									<ImagePreview src={previewUrl} title="Original Image" />
-									{originalSize > 0 && (
-										<p className="text-muted small mt-2">
-											Size: {formatBytes(originalSize)}
-										</p>
-									)}
-								</div>
-							)}
-
-							{editedUrl && (
-								<div>
-									<ImagePreview
-										src={editedUrl}
-										title="Converted Image"
-										showSize={true}
-										width={canvasRef.current?.width}
-										height={canvasRef.current?.height}
-									/>
-									{convertedSize > 0 && (
-										<p className="text-muted small mt-2">
-											Size: <strong>{formatBytes(convertedSize)}</strong>
-											{originalSize > 0 && (
-												<span className="ms-2">
-													({convertedSize < originalSize ? "↓" : "↑"}{" "}
-													{Math.round(
-														(Math.abs(convertedSize - originalSize) /
-															originalSize) *
-															100
-													)}
-													%)
-												</span>
-											)}
-										</p>
-									)}
-									<Button
-										variant="success"
-										onClick={handleDownload}
-										className="mt-2 w-100"
-									>
-										Download
-									</Button>
-								</div>
-							)}
-						</div>
+								)}
+								{editedUrl && (
+									<div>
+										<ImagePreview src={editedUrl} title="Grayscale Image" />
+										<div className="d-flex gap-2 mt-2">
+											<Button
+												variant="success"
+												onClick={handleDownload}
+												className="flex-grow-1"
+											>
+												Download
+											</Button>
+											<Button
+												variant="secondary"
+												onClick={handleReset}
+												className="flex-grow-1"
+											>
+												Reset
+											</Button>
+										</div>
+									</div>
+								)}
+							</div>
+						)}
 					</Col>
 				</Row>
 			)}
@@ -274,4 +267,4 @@ function Convert() {
 	);
 }
 
-export default Convert;
+export default Grayscale;

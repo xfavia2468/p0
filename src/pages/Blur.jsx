@@ -4,33 +4,27 @@ import ImageUpload from "../components/ImageUpload";
 import ImagePreview from "../components/ImagePreview";
 import { useImage } from "../ImageContext";
 import { useToast } from "../contexts/ToastContext";
-import { applyAllFilters } from "../utils/filterAlgorithms";
+import { ImageSkeleton, ButtonSkeleton } from "../components/LoadingSkeleton";
 
-function Filters() {
+function Blur() {
 	const [selectedFile, setSelectedFile] = useState(null);
 	const [previewUrl, setPreviewUrl] = useState(null);
 	const [editedUrl, setEditedUrl] = useState(null);
 	const [loading, setLoading] = useState(false);
-	const [brightness, setBrightness] = useState(0);
-	const [contrast, setContrast] = useState(0);
-	const [saturation, setSaturation] = useState(0);
+	const [radius, setRadius] = useState(5);
 	const [format, setFormat] = useState("image/png");
 	const { image: contextImage, setImage: setContextImage } = useImage();
 	const { addToast } = useToast();
 
 	const canvasRef = useRef(null);
-	const originalImageRef = useRef(null);
+	const imageRef = useRef(null);
 
 	useEffect(() => {
-		// Initialize from context if image exists
 		if (contextImage && contextImage.url) {
 			setSelectedFile(contextImage.file);
 			setPreviewUrl(contextImage.url);
 			setEditedUrl(null);
-			setBrightness(0);
-			setContrast(0);
-			setSaturation(0);
-			originalImageRef.current = null;
+			imageRef.current = null;
 		}
 	}, []);
 
@@ -45,10 +39,7 @@ function Filters() {
 		setSelectedFile(file);
 		setPreviewUrl(url);
 		setEditedUrl(null);
-		setBrightness(0);
-		setContrast(0);
-		setSaturation(0);
-		originalImageRef.current = null;
+		imageRef.current = null;
 	};
 
 	const loadImage = (file) =>
@@ -59,7 +50,46 @@ function Filters() {
 			img.src = URL.createObjectURL(file);
 		});
 
-	const applyFilters = async () => {
+	const applyBoxBlur = (imageData, blurRadius) => {
+		const data = imageData.data;
+		const width = imageData.width;
+		const height = imageData.height;
+		const rad = Math.round(blurRadius);
+		if (rad < 1) return;
+
+		const tempData = new Uint8ClampedArray(data);
+
+		for (let y = 0; y < height; y++) {
+			for (let x = 0; x < width; x++) {
+				let sumR = 0,
+					sumG = 0,
+					sumB = 0,
+					sumA = 0;
+				let count = 0;
+
+				for (let dy = -rad; dy <= rad; dy++) {
+					for (let dx = -rad; dx <= rad; dx++) {
+						const ny = Math.max(0, Math.min(height - 1, y + dy));
+						const nx = Math.max(0, Math.min(width - 1, x + dx));
+						const idx = (ny * width + nx) * 4;
+						sumR += tempData[idx];
+						sumG += tempData[idx + 1];
+						sumB += tempData[idx + 2];
+						sumA += tempData[idx + 3];
+						count++;
+					}
+				}
+
+				const idx = (y * width + x) * 4;
+				data[idx] = sumR / count;
+				data[idx + 1] = sumG / count;
+				data[idx + 2] = sumB / count;
+				data[idx + 3] = sumA / count;
+			}
+		}
+	};
+
+	const applyBlur = async () => {
 		if (!selectedFile) {
 			addToast("Please select an image first.", "error");
 			return;
@@ -69,10 +99,10 @@ function Filters() {
 		setEditedUrl(null);
 
 		try {
-			let img = originalImageRef.current;
+			let img = imageRef.current;
 			if (!img) {
 				img = await loadImage(selectedFile);
-				originalImageRef.current = img;
+				imageRef.current = img;
 			}
 
 			const canvas = canvasRef.current;
@@ -80,28 +110,25 @@ function Filters() {
 
 			canvas.width = img.width;
 			canvas.height = img.height;
-			ctx.clearRect(0, 0, img.width, img.height);
 			ctx.drawImage(img, 0, 0);
 
-			// Get image data and apply filters using utility
 			const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-			applyAllFilters(imageData, { brightness, contrast, saturation });
+			applyBoxBlur(imageData, radius);
 			ctx.putImageData(imageData, 0, 0);
 
 			canvas.toBlob(
 				(blob) => {
 					if (!blob) {
-						addToast("Failed to apply filters.", "error");
+						addToast("Failed to apply blur.", "error");
 						setLoading(false);
 						return;
 					}
 					const url = URL.createObjectURL(blob);
 					setEditedUrl(url);
-					// Convert blob to data URL for persistent storage
 					const reader = new FileReader();
 					reader.onloadend = () => {
 						setContextImage({ file: blob, url: reader.result });
-						addToast("Filters applied successfully!", "success");
+						addToast("Blur applied successfully!", "success");
 					};
 					reader.readAsDataURL(blob);
 					setLoading(false);
@@ -111,7 +138,7 @@ function Filters() {
 			);
 		} catch (err) {
 			console.error(err);
-			addToast("Failed to apply filters.", "error");
+			addToast("Failed to apply blur.", "error");
 			setLoading(false);
 		}
 	};
@@ -122,7 +149,7 @@ function Filters() {
 			format === "image/png" ? "png" : format === "image/jpeg" ? "jpg" : "webp";
 		const link = document.createElement("a");
 		link.href = editedUrl;
-		link.download = `filtered_image.${ext}`;
+		link.download = `blurred_image.${ext}`;
 		link.click();
 		addToast("Image downloaded successfully!", "success");
 	};
@@ -131,102 +158,72 @@ function Filters() {
 		setSelectedFile(null);
 		setPreviewUrl(null);
 		setEditedUrl(null);
-		setBrightness(0);
-		setContrast(0);
-		setSaturation(0);
-		originalImageRef.current = null;
+		setRadius(5);
+		imageRef.current = null;
 		addToast("Reset complete", "info");
-	};
-
-	const handleResetFilters = () => {
-		setBrightness(0);
-		setContrast(0);
-		setSaturation(0);
-		if (selectedFile) {
-			applyFilters();
-		}
 	};
 
 	return (
 		<Container className="py-5">
 			<div className={previewUrl ? "mb-4" : "text-center mb-5"}>
-				<h2 className="mb-3">Image Filters</h2>
-				<p className="text-muted">
-					Adjust brightness, contrast, and saturation to enhance your images
-				</p>
+				<h2 className="mb-3">Blur</h2>
+				<p className="text-muted">Apply a blur effect with adjustable radius</p>
 			</div>
 
 			{!previewUrl ? (
-				// Centered layout when no file selected
 				<Row className="justify-content-center">
 					<Col xs={12} md={8} lg={6}>
 						<ImageUpload onFileSelect={handleFileSelect} />
 					</Col>
 				</Row>
 			) : (
-				// Two-column layout when file is selected
 				<Row>
 					<Col xs={12} lg={5} className="mb-4">
 						<ImageUpload onFileSelect={handleFileSelect} />
 
 						<Form.Group className="mb-3">
-							<Form.Label htmlFor="brightness-range">
-								Brightness: {brightness}%
+							<Form.Label htmlFor="blurRadiusRange">
+								Blur Radius: {radius}px
 							</Form.Label>
-							<Form.Range
-								id="brightness-range"
-								min="-100"
-								max="100"
-								value={brightness}
-								onChange={(e) => setBrightness(parseInt(e.target.value))}
-							/>
-							<div className="d-flex justify-content-between">
-								<small className="text-muted">-100%</small>
-								<small className="text-muted">0%</small>
-								<small className="text-muted">+100%</small>
+							<div className="d-flex gap-2">
+								<Form.Range
+									id="blurRadiusRange"
+									min={1}
+									max={50}
+									value={radius}
+									onChange={(e) => setRadius(Number(e.target.value))}
+									disabled={!selectedFile}
+									className="flex-grow-1"
+									aria-describedby="blurRadiusHelp"
+								/>
+								<Form.Control
+									id="blurRadiusNumber"
+									type="number"
+									min="1"
+									max="50"
+									value={radius}
+									onChange={(e) =>
+										setRadius(
+											Math.max(1, Math.min(50, parseInt(e.target.value) || 1))
+										)
+									}
+									disabled={!selectedFile}
+									aria-labelledby="blurRadiusRange"
+									aria-describedby="blurRadiusHelp"
+									style={{ width: "80px" }}
+								/>
 							</div>
+							<small id="blurRadiusHelp" className="text-muted d-block mt-2">
+								Higher values create stronger blur effect
+							</small>
 						</Form.Group>
 
 						<Form.Group className="mb-3">
-							<Form.Label htmlFor="constrast-range">
-								Contrast: {contrast}%
+							<Form.Label htmlFor="outputFormatSelect">
+								Output Format
 							</Form.Label>
-							<Form.Range
-								id="constrast-range"
-								min="-100"
-								max="100"
-								value={contrast}
-								onChange={(e) => setContrast(parseInt(e.target.value))}
-							/>
-							<div className="d-flex justify-content-between">
-								<small className="text-muted">-100%</small>
-								<small className="text-muted">0%</small>
-								<small className="text-muted">+100%</small>
-							</div>
-						</Form.Group>
-
-						<Form.Group className="mb-3">
-							<Form.Label htmlFor="saturation-range">
-								Saturation: {saturation}%
-							</Form.Label>
-							<Form.Range
-								id="saturation-range"
-								min="-100"
-								max="100"
-								value={saturation}
-								onChange={(e) => setSaturation(parseInt(e.target.value))}
-							/>
-							<div className="d-flex justify-content-between">
-								<small className="text-muted">-100%</small>
-								<small className="text-muted">0%</small>
-								<small className="text-muted">+100%</small>
-							</div>
-						</Form.Group>
-
-						<Form.Group className="mb-3">
-							<Form.Label htmlFor="output-format">Output Format</Form.Label>
 							<Form.Select
-								id="output-format"
+								id="outputFormatSelect"
 								value={format}
 								onChange={(e) => setFormat(e.target.value)}
 							>
@@ -236,59 +233,54 @@ function Filters() {
 							</Form.Select>
 						</Form.Group>
 
-						<div className="mb-3">
-							<Button
-								variant="outline-secondary"
-								size="sm"
-								onClick={handleResetFilters}
-							>
-								Reset Filters
-							</Button>
-						</div>
-
 						<div className="mb-4 d-flex gap-2">
 							<Button
 								variant="primary"
-								onClick={applyFilters}
+								onClick={applyBlur}
 								disabled={!selectedFile || loading}
 							>
 								{loading ? (
 									<Spinner animation="border" size="sm" className="me-2" />
 								) : null}
-								{loading ? "Processing..." : "Apply Filters"}
+								{loading ? "Processing..." : "Apply Blur"}
 							</Button>
 							<Button variant="secondary" onClick={handleReset}>
-								Reset All
+								Reset
 							</Button>
 						</div>
 					</Col>
 
 					<Col xs={12} lg={7}>
-						<div className="sticky-top" style={{ top: "0.5rem" }}>
-							{previewUrl && (
-								<div className="mb-4">
+						{loading && editedUrl === null ? (
+							<ImageSkeleton />
+						) : (
+							<div className="sticky-top" style={{ top: "0.5rem" }}>
+								{previewUrl && (
 									<ImagePreview src={previewUrl} title="Original Image" />
-								</div>
-							)}{" "}
-							{editedUrl && (
-								<div>
-									<ImagePreview
-										src={editedUrl}
-										title="Filtered Image"
-										showSize={true}
-										width={canvasRef.current?.width}
-										height={canvasRef.current?.height}
-									/>
-									<Button
-										variant="success"
-										onClick={handleDownload}
-										className="mt-2 w-100"
-									>
-										Download
-									</Button>
-								</div>
-							)}
-						</div>
+								)}
+								{editedUrl && (
+									<div>
+										<ImagePreview src={editedUrl} title="Blurred Image" />
+										<div className="d-flex gap-2 mt-2">
+											<Button
+												variant="success"
+												onClick={handleDownload}
+												className="flex-grow-1"
+											>
+												Download
+											</Button>
+											<Button
+												variant="secondary"
+												onClick={handleReset}
+												className="flex-grow-1"
+											>
+												Reset
+											</Button>
+										</div>
+									</div>
+								)}
+							</div>
+						)}
 					</Col>
 				</Row>
 			)}
@@ -298,4 +290,4 @@ function Filters() {
 	);
 }
 
-export default Filters;
+export default Blur;

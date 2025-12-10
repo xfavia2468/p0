@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Container, Form, Button, Spinner, Row, Col } from "react-bootstrap";
 import ImageUpload from "../components/ImageUpload";
 import ImagePreview from "../components/ImagePreview";
+import { useImage } from "../ImageContext";
 
 function Compress() {
 	const [selectedFile, setSelectedFile] = useState(null);
@@ -12,8 +13,20 @@ function Compress() {
 	const [format, setFormat] = useState("image/jpeg");
 	const [originalSize, setOriginalSize] = useState(0);
 	const [compressedSize, setCompressedSize] = useState(0);
+	const { image: contextImage, setImage: setContextImage } = useImage();
 
 	const canvasRef = useRef(null);
+
+	useEffect(() => {
+		// Initialize from context if image exists
+		if (contextImage && contextImage.url) {
+			setSelectedFile(contextImage.file);
+			setPreviewUrl(contextImage.url);
+			setEditedUrl(null);
+			setOriginalSize(contextImage.file?.size || 0);
+			setCompressedSize(0);
+		}
+	}, []);
 
 	useEffect(() => {
 		return () => {
@@ -81,6 +94,12 @@ function Compress() {
 					setCompressedSize(blob.size);
 					const url = URL.createObjectURL(blob);
 					setEditedUrl(url);
+					// Convert blob to data URL for persistent storage
+					const reader = new FileReader();
+					reader.onloadend = () => {
+						setContextImage({ file: blob, url: reader.result });
+					};
+					reader.readAsDataURL(blob);
 					setLoading(false);
 				},
 				format,
@@ -116,7 +135,9 @@ function Compress() {
 		<Container className="py-5">
 			<div className={previewUrl ? "mb-4" : "text-center mb-5"}>
 				<h2 className="mb-3">Image Compressor</h2>
-				<p className="text-muted">Reduce file size while maintaining image quality</p>
+				<p className="text-muted">
+					Reduce file size while maintaining image quality
+				</p>
 			</div>
 
 			{!previewUrl ? (
@@ -133,8 +154,11 @@ function Compress() {
 						<ImageUpload onFileSelect={handleFileSelect} />
 
 						<Form.Group className="mb-3">
-							<Form.Label>Output Format</Form.Label>
+							<Form.Label htmlFor="outputFormatSelect">
+								Output Format
+							</Form.Label>
 							<Form.Select
+								id="outputFormatSelect"
 								value={format}
 								onChange={(e) => setFormat(e.target.value)}
 							>
@@ -144,20 +168,46 @@ function Compress() {
 						</Form.Group>
 
 						<Form.Group className="mb-3">
-							<Form.Label>Quality: {Math.round(quality * 100)}%</Form.Label>
-							<Form.Range
-								min="0.1"
-								max="1.0"
-								step="0.05"
-								value={quality}
-								onChange={(e) => setQuality(parseFloat(e.target.value))}
-							/>
-							<div className="d-flex justify-content-between">
+							<Form.Label htmlFor="qualityRange">
+								Quality: {Math.round(quality * 100)}%
+							</Form.Label>
+							<div className="d-flex gap-2">
+								<Form.Range
+									id="qualityRange"
+									min="0.1"
+									max="1.0"
+									step="0.05"
+									value={quality}
+									onChange={(e) => setQuality(parseFloat(e.target.value))}
+									className="flex-grow-1"
+									aria-describedby="qualityHelp"
+								/>
+								<Form.Control
+									id="qualityNumber"
+									type="number"
+									min="10"
+									max="100"
+									step="10"
+									value={Math.round(quality * 100)}
+									onChange={(e) =>
+										setQuality(
+											Math.max(
+												0.1,
+												Math.min(1, (parseInt(e.target.value) || 10) / 100)
+											)
+										)
+									}
+									style={{ width: "80px" }}
+									aria-labelledby="qualityRange"
+									aria-describedby="qualityHelp"
+								/>
+							</div>
+							<div className="d-flex justify-content-between mt-2">
 								<small className="text-muted">10% (Smaller)</small>
 								<small className="text-muted">50%</small>
 								<small className="text-muted">100% (Better)</small>
 							</div>
-							<small className="text-muted d-block mt-1">
+							<small id="qualityHelp" className="text-muted d-block mt-2">
 								Lower quality = smaller file size, but may reduce image quality
 							</small>
 						</Form.Group>
@@ -170,10 +220,13 @@ function Compress() {
 								{compressedSize > 0 && (
 									<>
 										<p className="mb-1">
-											<strong>Compressed size:</strong> {formatBytes(compressedSize)}
+											<strong>Compressed size:</strong>{" "}
+											{formatBytes(compressedSize)}
 										</p>
 										<p className="mb-0 text-success">
-											<strong>Saved:</strong> {formatBytes(originalSize - compressedSize)} ({calculateCompressionRatio()}% reduction)
+											<strong>Saved:</strong>{" "}
+											{formatBytes(originalSize - compressedSize)} (
+											{calculateCompressionRatio()}% reduction)
 										</p>
 									</>
 								)}
@@ -186,7 +239,9 @@ function Compress() {
 								onClick={handleCompress}
 								disabled={!selectedFile || loading}
 							>
-								{loading ? <Spinner animation="border" size="sm" className="me-2" /> : null}
+								{loading ? (
+									<Spinner animation="border" size="sm" className="me-2" />
+								) : null}
 								{loading ? "Compressing..." : "Compress Image"}
 							</Button>
 							<Button variant="secondary" onClick={handleReset}>
@@ -196,7 +251,7 @@ function Compress() {
 					</Col>
 
 					<Col xs={12} lg={7}>
-						<div className="sticky-top" style={{ top: '2rem' }}>
+						<div className="sticky-top" style={{ top: "2rem" }}>
 							{previewUrl && (
 								<div className="mb-4">
 									<ImagePreview src={previewUrl} title="Original Image" />
@@ -227,7 +282,11 @@ function Compress() {
 											)}
 										</p>
 									)}
-									<Button variant="success" onClick={handleDownload} className="mt-2 w-100">
+									<Button
+										variant="success"
+										onClick={handleDownload}
+										className="mt-2 w-100"
+									>
 										Download
 									</Button>
 								</div>
@@ -243,4 +302,3 @@ function Compress() {
 }
 
 export default Compress;
-

@@ -1,0 +1,5 @@
+.batch-processor .card:hover {
+	box-shadow: var(--shadow-sm);
+	transform: none;
+	border-color: var(--border-color);
+}

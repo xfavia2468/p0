@@ -10,8 +10,19 @@ import {
 } from "react-bootstrap";
 import ImageUpload from "../components/ImageUpload";
 import ImagePreview from "../components/ImagePreview";
+import { useImage } from "../ImageContext";
+import "./Crop.css";
 
 function Crop() {
+	const ASPECT_PRESETS = [
+		{ name: "Square", ratio: 1, icon: "⬜" },
+		{ name: "4:3 (Classic)", ratio: 4 / 3, icon: "📺" },
+		{ name: "16:9 (Widescreen)", ratio: 16 / 9, icon: "🎬" },
+		{ name: "3:2 (35mm)", ratio: 3 / 2, icon: "📷" },
+		{ name: "9:16 (Portrait)", ratio: 9 / 16, icon: "📱" },
+		{ name: "1:2 (Tall)", ratio: 0.5, icon: "📊" },
+	];
+
 	const [selectedFile, setSelectedFile] = useState(null);
 	const [previewUrl, setPreviewUrl] = useState(null);
 	const [editedUrl, setEditedUrl] = useState(null);
@@ -28,6 +39,8 @@ function Crop() {
 	const [displaySize, setDisplaySize] = useState({ width: 0, height: 0 });
 	const [isDragging, setIsDragging] = useState(false);
 	const [dragType, setDragType] = useState(null); // 'move', 'nw', 'ne', 'sw', 'se', 'n', 's', 'e', 'w'
+	const [format, setFormat] = useState("image/png");
+	const { image: contextImage, setImage: setContextImage } = useImage();
 	const dragStartRef = useRef({ x: 0, y: 0 });
 	const cropStartRef = useRef({ x: 0, y: 0, w: 0, h: 0 });
 
@@ -36,6 +49,53 @@ function Crop() {
 	const imgRef = useRef(null);
 	const imageContainerRef = useRef(null);
 	const overlayCanvasRef = useRef(null);
+
+	useEffect(() => {
+		// Initialize from context if image exists
+		if (contextImage && contextImage.url) {
+			// Convert data URL to blob if we don't have a file
+			const setupImage = async () => {
+				let fileToUse = contextImage.file;
+
+				if (!fileToUse && contextImage.url.startsWith("data:")) {
+					const response = await fetch(contextImage.url);
+					fileToUse = await response.blob();
+				}
+
+				setSelectedFile(fileToUse);
+				setPreviewUrl(contextImage.url);
+				setEditedUrl(null);
+				setCropX(0);
+				setCropY(0);
+				setCropWidth(0);
+				setCropHeight(0);
+
+				// Load image to get dimensions
+				const img = new window.Image();
+				img.onload = () => {
+					setImageDimensions({ width: img.width, height: img.height });
+					imgRef.current = img;
+
+					// Calculate display size (max 600px width)
+					const maxDisplayWidth = 600;
+					const scale = Math.min(1, maxDisplayWidth / img.width);
+					const displayW = img.width * scale;
+					const displayH = img.height * scale;
+					setDisplaySize({ width: displayW, height: displayH });
+
+					// Initialize crop to full image (in image coordinates)
+					setCropWidth(img.width);
+					setCropHeight(img.height);
+
+					// Draw overlay after a short delay to ensure container is rendered
+					setTimeout(() => drawOverlay(), 100);
+				};
+				img.src = contextImage.url;
+			};
+
+			setupImage();
+		}
+	}, []);
 
 	useEffect(() => {
 		return () => {
@@ -118,10 +178,16 @@ function Crop() {
 					}
 					const url = URL.createObjectURL(blob);
 					setEditedUrl(url);
+					// Convert blob to data URL for persistent storage
+					const reader = new FileReader();
+					reader.onloadend = () => {
+						setContextImage({ file: blob, url: reader.result });
+					};
+					reader.readAsDataURL(blob);
 					setLoading(false);
 				},
-				"image/png",
-				1.0
+				format,
+				format === "image/jpeg" ? 0.9 : 1.0
 			);
 		} catch (err) {
 			console.error(err);
@@ -601,8 +667,55 @@ function Crop() {
 		setCropHeight(newHeight);
 	};
 
+	const handlePresetClick = (preset) => {
+		const ratioStr =
+			preset.ratio === 1
+				? "1:1"
+				: preset.ratio === 4 / 3
+				? "4:3"
+				: preset.ratio === 16 / 9
+				? "16:9"
+				: preset.ratio === 3 / 2
+				? "3:2"
+				: preset.ratio === 9 / 16
+				? "9:16"
+				: "free";
+
+		// For non-standard ratios, handle them directly
+		if (preset.ratio === 3 / 2) {
+			setAspectRatio("3:2");
+			if (!imageDimensions.width) return;
+
+			let newWidth = cropWidth || imageDimensions.width;
+			let newHeight = Math.round(newWidth / preset.ratio);
+
+			if (newHeight > imageDimensions.height) {
+				newHeight = imageDimensions.height;
+				newWidth = Math.round(newHeight * preset.ratio);
+			}
+
+			setCropWidth(newWidth);
+			setCropHeight(newHeight);
+		} else if (preset.ratio === 0.5) {
+			setAspectRatio("1:2");
+			if (!imageDimensions.width) return;
+
+			let newWidth = cropWidth || imageDimensions.width;
+			let newHeight = newWidth / preset.ratio;
+
+			if (newHeight > imageDimensions.height) {
+				newHeight = imageDimensions.height;
+				newWidth = newHeight * preset.ratio;
+			}
+
+			setCropWidth(newWidth);
+			setCropHeight(newHeight);
+		} else {
+			handleAspectRatioChange({ target: { value: ratioStr } });
+		}
+	};
 	return (
-		<Container className="py-5">
+		<Container className="py-5 crop-page">
 			<div className={previewUrl ? "mb-4" : "text-center mb-5"}>
 				<h2 className="mb-3">Image Cropper</h2>
 				<p className="text-muted">
@@ -624,8 +737,9 @@ function Crop() {
 						<ImageUpload onFileSelect={handleFileSelect} />
 
 						<Form.Group className="mb-3">
-							<Form.Label>Aspect Ratio</Form.Label>
+							<Form.Label htmlFor="aspect-ratio">Aspect Ratio</Form.Label>
 							<Form.Select
+								id="aspect-ratio"
 								value={aspectRatio}
 								onChange={handleAspectRatioChange}
 							>
@@ -635,14 +749,17 @@ function Crop() {
 								<option value="16:9">16:9</option>
 								<option value="3:4">3:4</option>
 								<option value="9:16">9:16</option>
+								<option value="3:2">3:2 (35mm)</option>
+								<option value="1:2">1:2 (Tall)</option>
 							</Form.Select>
 						</Form.Group>
 
 						<Form.Group className="mb-3">
 							<Row className="g-2">
 								<Col xs={6}>
-									<Form.Label>X Position</Form.Label>
+									<Form.Label htmlFor="crop-x">X Position</Form.Label>
 									<Form.Control
+										id="crop-x"
 										type="number"
 										value={cropX}
 										onChange={(e) => {
@@ -660,8 +777,9 @@ function Crop() {
 									/>
 								</Col>
 								<Col xs={6}>
-									<Form.Label>Y Position</Form.Label>
+									<Form.Label htmlFor="crop-y">Y Position</Form.Label>
 									<Form.Control
+										id="crop-y"
 										type="number"
 										value={cropY}
 										onChange={(e) => {
@@ -684,8 +802,9 @@ function Crop() {
 						<Form.Group className="mb-3">
 							<Row className="g-2">
 								<Col xs={6}>
-									<Form.Label>Width</Form.Label>
+									<Form.Label htmlFor="crop-width">Width</Form.Label>
 									<Form.Control
+										id="crop-width"
 										type="number"
 										value={cropWidth}
 										onChange={(e) => {
@@ -716,8 +835,9 @@ function Crop() {
 									/>
 								</Col>
 								<Col xs={6}>
-									<Form.Label>Height</Form.Label>
+									<Form.Label htmlFor="crop-height">Height</Form.Label>
 									<Form.Control
+										id="crop-height"
 										type="number"
 										value={cropHeight}
 										onChange={(e) => {
@@ -781,14 +901,20 @@ function Crop() {
 									<h5 className="mb-3">Original Image</h5>
 									<Card
 										className="d-inline-block"
-										style={{ position: "relative" }}
+										style={{
+											position: "relative",
+											borderRadius: "0px",
+											overflow: "hidden",
+											padding: 0,
+										}}
 									>
 										<div
 											ref={imageContainerRef}
 											style={{
 												position: "relative",
-												display: "inline-block",
+												display: "block",
 												cursor: isDragging ? "grabbing" : "default",
+												lineHeight: "0",
 											}}
 											onMouseDown={handleMouseDown}
 											onMouseMove={handleMouseMove}

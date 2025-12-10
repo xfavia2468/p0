@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from "react";
 import { Container, Form, Button, Spinner, Row, Col } from "react-bootstrap";
 import ImageUpload from "../components/ImageUpload";
 import ImagePreview from "../components/ImagePreview";
+import { useImage } from "../ImageContext";
+import { useToast } from "../contexts/ToastContext";
 
 function Resize() {
 	const [selectedFile, setSelectedFile] = useState(null);
@@ -10,10 +12,21 @@ function Resize() {
 	const [keepAspect, setKeepAspect] = useState(true);
 	const [loading, setLoading] = useState(false);
 	const [format, setFormat] = useState("image/png"); // PNG by default
+	const { image: contextImage, setImage: setContextImage } = useImage();
 
 	const widthRef = useRef(null);
 	const heightRef = useRef(null);
 	const canvasRef = useRef(null);
+	const { addToast } = useToast();
+
+	// Initialize from context if image exists
+	useEffect(() => {
+		if (contextImage && contextImage.url) {
+			setSelectedFile(contextImage.file);
+			setPreviewUrl(contextImage.url);
+			setEditedUrl(null);
+		}
+	}, []);
 
 	// 🧹 Cleanup created object URLs to avoid memory leaks
 	useEffect(() => {
@@ -29,7 +42,7 @@ function Resize() {
 		setEditedUrl(null);
 	};
 
-	// 🖼️ Helper: load image as a Promise
+	// Helper: load image as a Promise
 	const loadImage = (file) =>
 		new Promise((resolve, reject) => {
 			const img = new window.Image();
@@ -40,7 +53,7 @@ function Resize() {
 
 	const handleResize = async () => {
 		if (!selectedFile) {
-			alert("Please select an image first.");
+			addToast("Please select an image first.", "error");
 			return;
 		}
 
@@ -87,6 +100,12 @@ function Resize() {
 					}
 					const url = URL.createObjectURL(blob);
 					setEditedUrl(url);
+					// Convert blob to data URL for persistent storage
+					const reader = new FileReader();
+					reader.onloadend = () => {
+						setContextImage({ file: blob, url: reader.result });
+					};
+					reader.readAsDataURL(blob);
 					setLoading(false);
 				},
 				format,
@@ -107,6 +126,7 @@ function Resize() {
 		link.href = editedUrl;
 		link.download = `resized_image.${ext}`;
 		link.click();
+		addToast("Image downloaded successfully!", "success");
 	};
 
 	const handleReset = () => {
@@ -122,7 +142,9 @@ function Resize() {
 		<Container className="py-5">
 			<div className={previewUrl ? "mb-4" : "text-center mb-5"}>
 				<h2 className="mb-3">Image Resizer</h2>
-				<p className="text-muted">Change image dimensions while maintaining or adjusting aspect ratio</p>
+				<p className="text-muted">
+					Change image dimensions while maintaining or adjusting aspect ratio
+				</p>
 			</div>
 
 			{!previewUrl ? (
@@ -141,7 +163,9 @@ function Resize() {
 						<Form.Group className="mb-3">
 							<Row className="g-2">
 								<Col xs={6}>
+									<Form.Label htmlFor="resize-width">Width</Form.Label>
 									<Form.Control
+										id="resize-width"
 										ref={widthRef}
 										type="number"
 										placeholder="Width (px)"
@@ -156,12 +180,15 @@ function Resize() {
 											e.target.value = val;
 										}}
 										onKeyDown={(e) => {
-											if (["e", "E", "+", "-"].includes(e.key)) e.preventDefault();
+											if (["e", "E", "+", "-"].includes(e.key))
+												e.preventDefault();
 										}}
 									/>
 								</Col>
 								<Col xs={6}>
+									<Form.Label htmlFor="resize-height">Height</Form.Label>
 									<Form.Control
+										id="resize-height"
 										ref={heightRef}
 										type="number"
 										placeholder="Height (px)"
@@ -176,7 +203,8 @@ function Resize() {
 											e.target.value = val;
 										}}
 										onKeyDown={(e) => {
-											if (["e", "E", "+", "-"].includes(e.key)) e.preventDefault();
+											if (["e", "E", "+", "-"].includes(e.key))
+												e.preventDefault();
 										}}
 									/>
 								</Col>
@@ -212,7 +240,9 @@ function Resize() {
 								onClick={handleResize}
 								disabled={!selectedFile || loading}
 							>
-								{loading ? <Spinner animation="border" size="sm" className="me-2" /> : null}
+								{loading ? (
+									<Spinner animation="border" size="sm" className="me-2" />
+								) : null}
 								{loading ? "Processing..." : "Resize Image"}
 							</Button>
 							<Button variant="secondary" onClick={handleReset}>
@@ -222,13 +252,12 @@ function Resize() {
 					</Col>
 
 					<Col xs={12} lg={7}>
-						<div className="sticky-top" style={{ top: '2rem' }}>
+						<div className="sticky-top" style={{ top: "0.5rem" }}>
 							{previewUrl && (
 								<div className="mb-4">
 									<ImagePreview src={previewUrl} title="Original Image" />
 								</div>
-							)}
-
+							)}{" "}
 							{editedUrl && (
 								<div>
 									<ImagePreview
@@ -238,7 +267,11 @@ function Resize() {
 										width={canvasRef.current?.width}
 										height={canvasRef.current?.height}
 									/>
-									<Button variant="success" onClick={handleDownload} className="mt-2 w-100">
+									<Button
+										variant="success"
+										onClick={handleDownload}
+										className="mt-2 w-100"
+									>
 										Download
 									</Button>
 								</div>

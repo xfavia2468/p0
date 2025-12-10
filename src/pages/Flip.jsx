@@ -4,33 +4,26 @@ import ImageUpload from "../components/ImageUpload";
 import ImagePreview from "../components/ImagePreview";
 import { useImage } from "../ImageContext";
 import { useToast } from "../contexts/ToastContext";
-import { applyAllFilters } from "../utils/filterAlgorithms";
+import { ImageSkeleton, ButtonSkeleton } from "../components/LoadingSkeleton";
 
-function Filters() {
+function Flip() {
 	const [selectedFile, setSelectedFile] = useState(null);
 	const [previewUrl, setPreviewUrl] = useState(null);
 	const [editedUrl, setEditedUrl] = useState(null);
 	const [loading, setLoading] = useState(false);
-	const [brightness, setBrightness] = useState(0);
-	const [contrast, setContrast] = useState(0);
-	const [saturation, setSaturation] = useState(0);
 	const [format, setFormat] = useState("image/png");
 	const { image: contextImage, setImage: setContextImage } = useImage();
 	const { addToast } = useToast();
 
 	const canvasRef = useRef(null);
-	const originalImageRef = useRef(null);
+	const imageRef = useRef(null);
 
 	useEffect(() => {
-		// Initialize from context if image exists
 		if (contextImage && contextImage.url) {
 			setSelectedFile(contextImage.file);
 			setPreviewUrl(contextImage.url);
 			setEditedUrl(null);
-			setBrightness(0);
-			setContrast(0);
-			setSaturation(0);
-			originalImageRef.current = null;
+			imageRef.current = null;
 		}
 	}, []);
 
@@ -45,10 +38,7 @@ function Filters() {
 		setSelectedFile(file);
 		setPreviewUrl(url);
 		setEditedUrl(null);
-		setBrightness(0);
-		setContrast(0);
-		setSaturation(0);
-		originalImageRef.current = null;
+		imageRef.current = null;
 	};
 
 	const loadImage = (file) =>
@@ -59,7 +49,7 @@ function Filters() {
 			img.src = URL.createObjectURL(file);
 		});
 
-	const applyFilters = async () => {
+	const applyFlip = async (flipHorizontal, flipVertical) => {
 		if (!selectedFile) {
 			addToast("Please select an image first.", "error");
 			return;
@@ -69,10 +59,10 @@ function Filters() {
 		setEditedUrl(null);
 
 		try {
-			let img = originalImageRef.current;
+			let img = imageRef.current;
 			if (!img) {
 				img = await loadImage(selectedFile);
-				originalImageRef.current = img;
+				imageRef.current = img;
 			}
 
 			const canvas = canvasRef.current;
@@ -80,28 +70,35 @@ function Filters() {
 
 			canvas.width = img.width;
 			canvas.height = img.height;
-			ctx.clearRect(0, 0, img.width, img.height);
-			ctx.drawImage(img, 0, 0);
 
-			// Get image data and apply filters using utility
-			const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-			applyAllFilters(imageData, { brightness, contrast, saturation });
-			ctx.putImageData(imageData, 0, 0);
+			ctx.save();
+
+			if (flipHorizontal || flipVertical) {
+				const centerX = img.width / 2;
+				const centerY = img.height / 2;
+
+				ctx.translate(centerX, centerY);
+				if (flipHorizontal) ctx.scale(-1, 1);
+				if (flipVertical) ctx.scale(1, -1);
+				ctx.translate(-centerX, -centerY);
+			}
+
+			ctx.drawImage(img, 0, 0);
+			ctx.restore();
 
 			canvas.toBlob(
 				(blob) => {
 					if (!blob) {
-						addToast("Failed to apply filters.", "error");
+						addToast("Failed to flip image.", "error");
 						setLoading(false);
 						return;
 					}
 					const url = URL.createObjectURL(blob);
 					setEditedUrl(url);
-					// Convert blob to data URL for persistent storage
 					const reader = new FileReader();
 					reader.onloadend = () => {
 						setContextImage({ file: blob, url: reader.result });
-						addToast("Filters applied successfully!", "success");
+						addToast("Image flipped successfully!", "success");
 					};
 					reader.readAsDataURL(blob);
 					setLoading(false);
@@ -111,7 +108,7 @@ function Filters() {
 			);
 		} catch (err) {
 			console.error(err);
-			addToast("Failed to apply filters.", "error");
+			addToast("Failed to flip image.", "error");
 			setLoading(false);
 		}
 	};
@@ -122,7 +119,7 @@ function Filters() {
 			format === "image/png" ? "png" : format === "image/jpeg" ? "jpg" : "webp";
 		const link = document.createElement("a");
 		link.href = editedUrl;
-		link.download = `filtered_image.${ext}`;
+		link.download = `flipped_image.${ext}`;
 		link.click();
 		addToast("Image downloaded successfully!", "success");
 	};
@@ -131,28 +128,16 @@ function Filters() {
 		setSelectedFile(null);
 		setPreviewUrl(null);
 		setEditedUrl(null);
-		setBrightness(0);
-		setContrast(0);
-		setSaturation(0);
-		originalImageRef.current = null;
+		imageRef.current = null;
 		addToast("Reset complete", "info");
-	};
-
-	const handleResetFilters = () => {
-		setBrightness(0);
-		setContrast(0);
-		setSaturation(0);
-		if (selectedFile) {
-			applyFilters();
-		}
 	};
 
 	return (
 		<Container className="py-5">
 			<div className={previewUrl ? "mb-4" : "text-center mb-5"}>
-				<h2 className="mb-3">Image Filters</h2>
+				<h2 className="mb-3">Flip Image</h2>
 				<p className="text-muted">
-					Adjust brightness, contrast, and saturation to enhance your images
+					Flip your image horizontally, vertically, or both
 				</p>
 			</div>
 
@@ -170,63 +155,39 @@ function Filters() {
 						<ImageUpload onFileSelect={handleFileSelect} />
 
 						<Form.Group className="mb-3">
-							<Form.Label htmlFor="brightness-range">
-								Brightness: {brightness}%
-							</Form.Label>
-							<Form.Range
-								id="brightness-range"
-								min="-100"
-								max="100"
-								value={brightness}
-								onChange={(e) => setBrightness(parseInt(e.target.value))}
-							/>
-							<div className="d-flex justify-content-between">
-								<small className="text-muted">-100%</small>
-								<small className="text-muted">0%</small>
-								<small className="text-muted">+100%</small>
+							<Form.Label>Flip Options</Form.Label>
+							<div className="d-flex gap-2 flex-wrap">
+								<Button
+									variant="outline-primary"
+									size="sm"
+									onClick={() => applyFlip(true, false)}
+									disabled={!selectedFile || loading}
+								>
+									Horizontal
+								</Button>
+								<Button
+									variant="outline-primary"
+									size="sm"
+									onClick={() => applyFlip(false, true)}
+									disabled={!selectedFile || loading}
+								>
+									Vertical
+								</Button>
+								<Button
+									variant="outline-primary"
+									size="sm"
+									onClick={() => applyFlip(true, true)}
+									disabled={!selectedFile || loading}
+								>
+									Both
+								</Button>
 							</div>
 						</Form.Group>
 
 						<Form.Group className="mb-3">
-							<Form.Label htmlFor="constrast-range">
-								Contrast: {contrast}%
-							</Form.Label>
-							<Form.Range
-								id="constrast-range"
-								min="-100"
-								max="100"
-								value={contrast}
-								onChange={(e) => setContrast(parseInt(e.target.value))}
-							/>
-							<div className="d-flex justify-content-between">
-								<small className="text-muted">-100%</small>
-								<small className="text-muted">0%</small>
-								<small className="text-muted">+100%</small>
-							</div>
-						</Form.Group>
-
-						<Form.Group className="mb-3">
-							<Form.Label htmlFor="saturation-range">
-								Saturation: {saturation}%
-							</Form.Label>
-							<Form.Range
-								id="saturation-range"
-								min="-100"
-								max="100"
-								value={saturation}
-								onChange={(e) => setSaturation(parseInt(e.target.value))}
-							/>
-							<div className="d-flex justify-content-between">
-								<small className="text-muted">-100%</small>
-								<small className="text-muted">0%</small>
-								<small className="text-muted">+100%</small>
-							</div>
-						</Form.Group>
-
-						<Form.Group className="mb-3">
-							<Form.Label htmlFor="output-format">Output Format</Form.Label>
+							<Form.Label htmlFor="flip-format">Output Format</Form.Label>
 							<Form.Select
-								id="output-format"
+								id="flip-format"
 								value={format}
 								onChange={(e) => setFormat(e.target.value)}
 							>
@@ -236,59 +197,54 @@ function Filters() {
 							</Form.Select>
 						</Form.Group>
 
-						<div className="mb-3">
-							<Button
-								variant="outline-secondary"
-								size="sm"
-								onClick={handleResetFilters}
-							>
-								Reset Filters
-							</Button>
-						</div>
-
 						<div className="mb-4 d-flex gap-2">
 							<Button
 								variant="primary"
-								onClick={applyFilters}
+								onClick={() => applyFlip(true, false)}
 								disabled={!selectedFile || loading}
 							>
 								{loading ? (
 									<Spinner animation="border" size="sm" className="me-2" />
 								) : null}
-								{loading ? "Processing..." : "Apply Filters"}
+								{loading ? "Processing..." : "Flip Image"}
 							</Button>
 							<Button variant="secondary" onClick={handleReset}>
-								Reset All
+								Reset
 							</Button>
 						</div>
 					</Col>
 
 					<Col xs={12} lg={7}>
-						<div className="sticky-top" style={{ top: "0.5rem" }}>
-							{previewUrl && (
-								<div className="mb-4">
+						{loading && editedUrl === null ? (
+							<ImageSkeleton />
+						) : (
+							<div className="sticky-top" style={{ top: "0.5rem" }}>
+								{previewUrl && (
 									<ImagePreview src={previewUrl} title="Original Image" />
-								</div>
-							)}{" "}
-							{editedUrl && (
-								<div>
-									<ImagePreview
-										src={editedUrl}
-										title="Filtered Image"
-										showSize={true}
-										width={canvasRef.current?.width}
-										height={canvasRef.current?.height}
-									/>
-									<Button
-										variant="success"
-										onClick={handleDownload}
-										className="mt-2 w-100"
-									>
-										Download
-									</Button>
-								</div>
-							)}
-						</div>
+								)}
+								{editedUrl && (
+									<div>
+										<ImagePreview src={editedUrl} title="Flipped Image" />
+										<div className="d-flex gap-2 mt-2">
+											<Button
+												variant="success"
+												onClick={handleDownload}
+												className="flex-grow-1"
+											>
+												Download
+											</Button>
+											<Button
+												variant="secondary"
+												onClick={handleReset}
+												className="flex-grow-1"
+											>
+												Reset
+											</Button>
+										</div>
+									</div>
+								)}
+							</div>
+						)}
 					</Col>
 				</Row>
 			)}
@@ -298,4 +254,4 @@ function Filters() {
 	);
 }
 
-export default Filters;
+export default Flip;

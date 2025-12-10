@@ -1,91 +1,103 @@
 :root {
-  /* Modern Color Palette - Balanced Blues and Purples */
-  --primary-blue: #5B8DEF;
-  --primary-blue-dark: #4A7BC8;
-  --primary-blue-light: #7BA3F5;
-  --nav-blue: #4A7BC8;
-  --card-blue: #E8F0FE;
-  --secondary-purple: #8B7ED8;
-  --secondary-purple-light: #A89EE8;
-  --accent-purple: #B19CD9;
-  
-  /* Background Colors - Soft and Warm */
-  --bg-primary: #FFFFFF;
-  --bg-secondary: #FAF8FC;
-  --bg-tertiary: #F5F3F8;
-  --bg-card: #FFFFFF;
-  
-  /* Text Colors */
-  --text-primary: #1A1F36;
-  --text-secondary: #4A5568;
-  --text-muted: #718096;
-  --text-on-dark: #FFFFFF;
-  --text-on-card: #2D3748;
-  
-  /* Border and Shadow */
-  --border-color: #E2E8F0;
-  --border-hover: #CBD5E0;
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07);
-  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
-  
-  /* Gradients */
-  --gradient-primary: linear-gradient(135deg, #5B8DEF 0%, #8B7ED8 100%);
-  --gradient-subtle: linear-gradient(135deg, #E8F0FE 0%, #F5F0FF 100%);
-  
-  /* Typography */
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
-  line-height: 1.6;
-  font-weight: 400;
-  
-  color-scheme: light;
-  color: var(--text-primary);
-  background-color: var(--bg-secondary);
+	/* Modern Color Palette - Balanced Blues and Purples */
+	--primary-blue: #5b8def;
+	--primary-blue-dark: #4a7bc8;
+	--primary-blue-light: #7ba3f5;
+	--nav-blue: #4a7bc8;
+	--card-blue: #e8f0fe;
+	--secondary-purple: #8b7ed8;
+	--secondary-purple-light: #a89ee8;
+	--accent-purple: #b19cd9;
 
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+	/* Background Colors - Soft and Warm */
+	--bg-primary: #ffffff;
+	--bg-secondary: #faf8fc;
+	--bg-tertiary: #f5f3f8;
+	--bg-card: #ffffff;
+
+	/* Text Colors */
+	--text-primary: #1a1f36;
+	--text-secondary: #4a5568;
+	--text-muted: #718096;
+	--text-on-dark: #ffffff;
+	--text-on-card: #2d3748;
+
+	/* Border and Shadow */
+	--border-color: #e2e8f0;
+	--border-hover: #cbd5e0;
+	--shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
+	--shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07);
+	--shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+
+	/* Gradients */
+	--gradient-primary: linear-gradient(135deg, #5b8def 0%, #8b7ed8 100%);
+	--gradient-subtle: linear-gradient(135deg, #e8f0fe 0%, #f5f0ff 100%);
+
+	/* Typography */
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
+		"Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
+		sans-serif;
+	line-height: 1.6;
+	font-weight: 400;
+
+	color-scheme: light;
+	color: var(--text-primary);
+	background-color: var(--bg-secondary);
+
+	font-synthesis: none;
+	text-rendering: optimizeLegibility;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
 }
 
 * {
-  box-sizing: border-box;
+	box-sizing: border-box;
 }
 
 a {
-  font-weight: 500;
-  color: var(--primary-blue);
-  text-decoration: none;
-  transition: color 0.2s ease;
+	font-weight: 500;
+	color: var(--primary-blue);
+	text-decoration: none;
+	transition: color 0.2s ease;
 }
 a:hover {
-  color: var(--secondary-purple);
+	color: var(--secondary-purple);
 }
 
 body {
-  margin: 0;
-  min-width: 320px;
-  min-height: 100vh;
-  background-color: var(--bg-secondary);
+	margin: 0;
+	min-width: 320px;
+	min-height: 100vh;
+	background-color: var(--bg-secondary);
 }
 
-h1, h2, h3, h4, h5, h6 {
-  color: var(--text-primary);
-  font-weight: 600;
-  margin-top: 0;
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+	color: var(--text-primary);
+	font-weight: 600;
+	margin-top: 0;
 }
 
 h1 {
-  font-size: 2.5em;
-  line-height: 1.2;
+	font-size: 2.5em;
+	line-height: 1.2;
 }
 
 h2 {
-  font-size: 2em;
-  line-height: 1.3;
+	font-size: 2em;
+	line-height: 1.3;
 }
 
 h3 {
-  font-size: 1.5em;
-  line-height: 1.4;
+	font-size: 1.5em;
+	line-height: 1.4;
+}
+
+/* Disable hover animation on images */
+img {
+	transition: none !important;
 }
